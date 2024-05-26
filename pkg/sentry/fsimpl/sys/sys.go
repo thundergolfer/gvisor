@@ -206,7 +206,16 @@ func cpuDir(ctx context.Context, fs *filesystem, creds *auth.Credentials) kernfs
 		"present":  fs.newCPUFile(ctx, creds, maxCPUCores, linux.FileMode(0444)),
 	}
 	for i := uint(0); i < maxCPUCores; i++ {
-		children[fmt.Sprintf("cpu%d", i)] = fs.newDir(ctx, creds, linux.FileMode(0555), nil)
+		children[fmt.Sprintf("cpu%d", i)] = fs.newDir(ctx, creds, linux.FileMode(0555), map[string]kernfs.Inode{
+			"topology": fs.newDir(ctx, creds, defaultSysDirMode,  map[string]kernfs.Inode{
+				// Pretend each CPU is a distinct core (rather than a hyperthread).
+				"core_cpus":           fs.newStaticFile(ctx, creds, 0444, fmt.Sprintf("%0*d\n", maxCPUCores, 0)),
+				// Pretend all CPUs are in the same package.
+				"package_cpus":        fs.newStaticFile(ctx, creds, 0444, fmt.Sprintf("%x\n", (1 << maxCPUCores) - 1)),
+				// Pretend all CPUs are in the same socket.
+				"physical_package_id": fs.newStaticFile(ctx, creds, 0444, "0\n"),
+			}),
+		})
 	}
 	return fs.newDir(ctx, creds, defaultSysDirMode, children)
 }
